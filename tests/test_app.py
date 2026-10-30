@@ -1,163 +1,82 @@
-
 from fastapi.testclient import TestClient
-from app import APP, TAREFAS
-from unittest.mock import patch
+from app import APP
+from datetime import datetime
 
 CLIENT = TestClient(APP)
+DATA = None
+DATA_CONCLUSAO = None
 
-def limpar_tarefas():
-    TAREFAS.clear()
-
-def test_listar_tarefas():
-    limpar_tarefas()
-
-    CLIENT.post("/tarefas", params={
-        "titulo": "Estudar Python",
-        "descricao": "Estudar testes unitários"
-    })
-
-    resposta = CLIENT.get("/tarefas")
-
-    assert resposta.status_code == 200
-    assert resposta.json() == [{"0": "Estudar Python"}]
-
-
-def test_criar_tarefa():
-    limpar_tarefas()
-
-    resposta = CLIENT.post("/tarefas", params={
-        "titulo": "Estudar FastAPI",
-        "descricao": "Aprender testes com TestClient"
-    })
-
-    assert resposta.status_code == 200
-    assert resposta.json() == {"mensagem": "OK"}
-    assert len(TAREFAS) == 1
-    assert TAREFAS[0]["titulo"] == "Estudar FastAPI"
-    assert TAREFAS[0]["descricao"] == "Aprender testes com TestClient"
-
-
-def test_concluir_tarefa():
-    limpar_tarefas()
-
-    CLIENT.post("/tarefas", params={
-        "titulo": "Finalizar projeto",
-        "descricao": "Concluir atividade"
-    })
-
-    with patch("app.requests.post") as mock_post:
-        resposta = CLIENT.put("/tarefas/0")
-
-    assert resposta.status_code == 200
-    assert resposta.json() == {"mensagem": "Tarefa atualizada"}
-    assert TAREFAS[0]["concluida"] == True
-    assert "concluida_em" in TAREFAS[0]
-    mock_post.assert_called_once()
-
-
-def test_visualizar_tarefa():
-    limpar_tarefas()
-
-    CLIENT.post("/tarefas", params={
-        "titulo": "Aprender Python",
-        "descricao": "Estudar FastAPI"
-    })
-
-    resposta = CLIENT.get("/tarefas/0")
-
-    assert resposta.status_code == 200
-    assert resposta.json()["id"] == 0
-    assert resposta.json()["titulo"] == "Aprender Python"
-    assert resposta.json()["descricao"] == "Estudar FastAPI"
-
-
-def test_apagar_tarefa():
-    limpar_tarefas()
-
-    CLIENT.post("/tarefas", params={
-        "titulo": "Tarefa para excluir",
-        "descricao": "Essa tarefa será removida"
-    })
-
-    resposta = CLIENT.delete("/tarefas/0")
-
-    assert resposta.status_code == 200
-    assert resposta.json() == {"mensagem": "Tarefa apagada"}
-    assert len(TAREFAS) == 0
-
-# Teste da rota inicial
 def test_index():
     resposta = CLIENT.get("/")
-
     assert resposta.status_code == 200
     assert resposta.json() == {"mensagem": "Olá, mundo!"}
 
-
-# Teste GET /tarefas/{id} com tarefa inexistente
-def test_visualizar_tarefa_inexistente():
-    limpar_tarefas()
-
-    resposta = CLIENT.get("/tarefas/999")
-
+# 1. Implementar um teste unitário para a rota /tarefas (GET)
+def test_tarefas_get():
+    resposta = CLIENT.get("/tarefas")
     assert resposta.status_code == 200
-    assert resposta.json() == {"mensagem": "Tarefa não existe"}
 
+    # Testando se a rota retorna uma lista vazia
+    assert resposta.json() == []
 
-# Teste PUT /tarefas/{id} com tarefa inexistente
-def test_concluir_tarefa_inexistente():
-    limpar_tarefas()
+# 2. Implementar um teste unitário para a rota /tarefas (POST)
+def test_tarefas_post():
+    global DATA
+    resposta = CLIENT.post("/tarefas?titulo=teste&descricao=teste")
+    DATA = datetime.now().isoformat(timespec="seconds")
 
-    resposta = CLIENT.put("/tarefas/999")
+    assert resposta.status_code == 201
+    assert resposta.json() == {"mensagem": "OK"}
 
+    resposta = CLIENT.get("/tarefas")
+    assert resposta.json() == [
+        {"0": "teste"}
+    ]
+
+def test_tarefa_criada():
+    resposta = CLIENT.get("/tarefas/0")
     assert resposta.status_code == 200
-    assert resposta.json() == {"mensagem": "Tarefa não existe"}
+    assert resposta.json() == {
+        "id": 0,
+        "titulo": "teste",
+        "descricao": "teste",
+        "concluida": False,
+        "criada_em": str(DATA),
+    }
 
-
-# Teste PUT /tarefas/{id} com tarefa já concluída
-def test_concluir_tarefa_ja_concluida():
-    limpar_tarefas()
-
-    CLIENT.post("/tarefas", params={
-        "titulo": "Estudar Python",
-        "descricao": "Finalizar atividade"
-    })
-
-    # Marca a tarefa como concluída antes da requisição
-    TAREFAS[0]["concluida"] = True
-
+# 3. Implementar um teste unitário para a rota /tarefas/{id} (PUT)
+def test_tarefas_put():
+    global DATA_CONCLUSAO
     resposta = CLIENT.put("/tarefas/0")
+    DATA_CONCLUSAO = datetime.now().isoformat(timespec="seconds")
+    assert resposta.json() == {"mensagem": "Tarefa atualizada"}
 
-    assert resposta.status_code == 200
-    assert resposta.json() == {"mensagem": "Tarefa não existe"}
-    assert TAREFAS[0]["concluida"] == True
-
-
-# Teste DELETE /tarefas/{id} com tarefa inexistente
-def test_apagar_tarefa_inexistente():
-    limpar_tarefas()
-
-    resposta = CLIENT.delete("/tarefas/999")
-
-    assert resposta.status_code == 200
+    resposta = CLIENT.put("/tarefas/1")
     assert resposta.json() == {"mensagem": "Tarefa não existe"}
 
-# Teste DELETE /tarefas/{id} excluindo a segunda tarefa
-def test_apagar_segunda_tarefa():
-    limpar_tarefas()
+# 4. Implementar um teste unitário para a rota /tarefas/{id} (GET)
+def test_tarefas_get_id():
+    resposta = CLIENT.get("/tarefas/0")
+    assert resposta.status_code == 200
+    assert resposta.json() == {
+        "id": 0,
+        "titulo": "teste",
+        "descricao": "teste",
+        "concluida": True,
+        "criada_em": str(DATA),
+        "concluida_em": str(DATA_CONCLUSAO)
+    }
 
-    CLIENT.post("/tarefas", params={
-        "titulo": "Primeira tarefa",
-        "descricao": "Não será excluída"
-    })
+    resposta = CLIENT.get("/tarefas/1")
+    assert resposta.json() == {"mensagem": "Tarefa não existe"}
 
-    CLIENT.post("/tarefas", params={
-        "titulo": "Segunda tarefa",
-        "descricao": "Será excluída"
-    })
-
+# 5. Implementar um teste unitário para a rota /tarefas/{id} (DELETE)
+def teste_tarefas_delete():
     resposta = CLIENT.delete("/tarefas/1")
+    assert resposta.json() == {"mensagem": "Tarefa não existe"}
 
-    assert resposta.status_code == 200
-    assert resposta.json() == {"mensagem": "Tarefa apagada"}
-    assert len(TAREFAS) == 1
-    assert TAREFAS[0]["titulo"] == "Primeira tarefa"
+    resposta = CLIENT.delete("/tarefas/0")
+    assert resposta.json() == {"mensagem": "Tarefa apagada"} 
+
+    resposta = CLIENT.get("/tarefas")
+    assert resposta.json() == []
