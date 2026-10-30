@@ -80,3 +80,13 @@ def teste_tarefas_delete():
 
     resposta = CLIENT.get("/tarefas")
     assert resposta.json() == []
+
+# 6. Teste GET /autor
+def test_autor():
+    """Testa se a rota retorna o nome do autor."""
+    resposta = CLIENT.get("/autor")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {
+        "mensagem": "Matheus Sossai"
+    }

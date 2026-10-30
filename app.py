@@ -85,7 +85,7 @@ async def concluir_tarefa(id_tarefa: int):
 
             try:
                 _ = requests.post(
-                    f"http://localhost:8000/notificar?id={id}&titulo={titulo}",
+                    f"http://localhost:8000/notificar?id={id_tarefa}&titulo={titulo}",
                     timeout=1
                 )
             except RequestConnectionError as e:
@@ -118,12 +118,9 @@ async def index():
     """ Rota raíz. """
     return {"mensagem": "Olá, mundo!"}
 
-# 1. Implementar uma rota chamada "/autor" que retorna 
-# um dicionário no formato {"mensagem": SEU NOME COMPLETO}
 
-# 2. Criar um teste unitário para verificar se a rota 
-# está produzindo o resultado esperado
+@APP.get("/autor")
+async def autor():
+    """Retorna o nome completo do autor."""
+    return {"mensagem": "Matheus Sossai"}
 
-# 3. Verificar se o código está no padrão do PyLint
-
-# 4. Enviar o código para o repositório (git push)
