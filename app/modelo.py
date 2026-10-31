@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from sqlmodel import SQLModel, Field
 
+
 class Tarefa(SQLModel, table=True):
     """Modelo de tarefa"""
 
@@ -13,11 +14,6 @@ class Tarefa(SQLModel, table=True):
     concluida: bool = False
     data_criacao: datetime
     data_conclusao: Optional[datetime] = None
-
-    def finalizar(self):
-        """Método para finalizar tarefa"""
-        self.concluida = True
-        self.data_conclusao = datetime.now().astimezone(timezone.utc)
 
     def finalizar(self):
         """Método para finalizar tarefa"""
