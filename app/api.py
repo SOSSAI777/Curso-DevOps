@@ -145,7 +145,7 @@ async def index():
 @APP.get("/autor")
 async def autor():
     """Rota para retornar o autor da aplicação"""
-    return {"mensagem": "Matheus Sossai"}
+    return {"mensagem": "Pedro Rocha Horchulhack"}
 
 
 # 2. Criar um teste unitário para verificar se a rota

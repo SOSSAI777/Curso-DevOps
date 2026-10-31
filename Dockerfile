@@ -1,13 +1,50 @@
-FROM python:3.14-slim
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
-RUN mkdir /app
+name: DevOps 30/10/26
 
-WORKDIR /app
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: 
 
-COPY app.py ./app.py
-COPY requirements.txt ./requirements.txt
+permissions:
+  contents: read
 
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
-
-CMD ["fastapi", "run"]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.14"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Lint with pylint
+      run: |
+        pylint app
+    - name: Test with pytest
+      run: |
+        pytest --rootdir app
+  entrega:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configura Docker
+        uses: docker/setup-buildx-action@v3
+      - name: Autenticação no Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build e push
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ${{ vars.DOCKERHUB_USER }}/tarefas:2.0
