@@ -1,107 +1,152 @@
-""" Aplicação para o módulo de extensão DevOps """
+"""Aplicação para o módulo de extensão DevOps"""
 
-from datetime import datetime
-from fastapi import FastAPI
-from app.modelo import Tarefa
-import requests
+from datetime import datetime, timezone
+from typing import Annotated, List
+import os
+
+from fastapi import FastAPI, Depends
+from sqlmodel import SQLModel, Session, create_engine, select
 from requests.exceptions import ConnectionError as RequestConnectionError
 
-APP = FastAPI()
+from .modelo import Tarefa
+
+DATABASE_USERNAME = os.environ.get("DATABASE_USERNAME")
+DATABASE_PASSWORD = os.environ.get("DATABASE_PASSWORD")
+DATABASE_ADDRESS = os.environ.get("DATABASE_ADDRESS")
+DATABASE = os.environ.get("DATABASE")
+
+if DATABASE_USERNAME is None:
+    print("DATABASE_USERNAME está faltando")
+    exit(1)
+
+if DATABASE_PASSWORD is None:
+    print("DATABASE_PASSWORD está faltando")
+    exit(1)
+
+if DATABASE_ADDRESS is None:
+    print("DATABASE_ADDRESS está faltando")
+    exit(1)
+
+if DATABASE is None:
+    print("DATABASE está faltando")
+    exit(1)
+
+ENGINE = create_engine(f"mysql+pymysql://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_ADDRESS}:3306/{DATABASE}")
+def criar_sessao():
+    with Session(ENGINE) as s:
+        yield s
+
+SESSAO = Annotated[Session, Depends(criar_sessao)]
+
+async def inicializacao(api: FastAPI):
+    SQLModel.metadata.create_all(ENGINE)
+    yield
+
+APP = FastAPI(lifespan=inicializacao)
 TAREFAS = []
+
 
 # GET /tarefas: Lista todas as tarefas (somente id e titulo)
 @APP.get("/tarefas")
-async def tarefas():
-    """ Rota para listar as tarefas. """
-    lista_somente_id_titulo = []
+async def tarefas(sessao: SESSAO) -> List[Tarefa]:
+    """Rota para listar as tarefas."""
 
-    for tarefa in TAREFAS:
-        id_tarefa = tarefa.id
-        titulo_tarefa = tarefa.titulo
+    lista_tarefas = sessao.exec(select(Tarefa).offset(0)).all()
 
-        lista_somente_id_titulo.append({id_tarefa: titulo_tarefa})
+    return lista_tarefas
+    
 
-    return lista_somente_id_titulo
 
 # POST /tarefas: Cria tarefa
 @APP.post("/tarefas", status_code=201)
-async def post_tarefa(titulo: str, descricao: str = None):
-    """ Rota para criar uma tarefa. """
-    tarefa_nova = Tarefa(id=len(TAREFAS), titulo=titulo, descricao=descricao, data_criacao=datetime.now().isoformat(timespec='seconds'))
+async def post_tarefa(sessao: SESSAO, titulo: str, descricao: str = None):
+    """Rota para criar uma tarefa."""
+    tarefa_nova = Tarefa(
+        titulo=titulo,
+        descricao=descricao,
+        data_criacao=datetime.now().astimezone(timezone.utc),
+    )
 
-    TAREFAS.append(tarefa_nova)
+    sessao.add(tarefa_nova)
+    sessao.commit()
+    sessao.refresh(tarefa_nova)
 
     return {"mensagem": "OK"}
 
+
 # GET /tarefas/{id_tarefa}: Visualizar tarefa específica
 @APP.get("/tarefas/{id_tarefa}")
-async def tarefa_especifica(id_tarefa: int):
-    """ Rota para visualizar uma tarefa específica """
-    # 1. Selecionar a tarefa de ID recebido como parâmetro
-    # 2. Retornar todos os dados da tarefa
-    # 3. Caso a tarefa não exista, você tem que mostrar que a tarefa não existe
+async def tarefa_especifica(sessao: SESSAO, id_tarefa: int) -> Tarefa:
+    """Rota para visualizar uma tarefa específica"""
+    # select * from tarefas where id == id_tarefa
+    regra = select(Tarefa).where(Tarefa.id == id_tarefa)
+    resultado = sessao.exec(regra).all()
 
-    for tarefa in TAREFAS:
-        if id_tarefa == tarefa.id:
-            return tarefa
+    if resultado:
+        return resultado[0]
 
     return {"mensagem": "Tarefa não existe"}
 
 # PUT /tarefas/{id}: Atualiza tarefa específica
 @APP.put("/tarefas/{id_tarefa}")
-async def concluir_tarefa(id_tarefa: int):
-    """ Rota para concluir uma tarefa. """
-    # 1. Selecionar a tarefa de ID recebido como parâmetro
-    # 2. Marcar a tarefa como concluída
-    # 3. Você deve armazenar o horário de conclusão da tarefa
-    # 4. Caso a tarefa não exista, você tem que mostrar que a tarefa não existe
+async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
+    """Rota para concluir uma tarefa."""
+    
+    # Atualizar a rota para suportar o SQLModel/Conexão com BD
+    # Usar select para filtrar as tarefas com base no ID e se estiver concluída
+    # Atualizar usando sessao.add, sessao.commit, sessao.refresh
 
-    for tarefa in TAREFAS:
-        if id_tarefa == tarefa.id and tarefa.concluida is False:
-            tarefa.finalizar()
-            titulo = tarefa.titulo
+    regra = select(Tarefa).where(Tarefa.id == id_tarefa)
+    resultado = sessao.exec(regra).all()
 
-            try:
-                _ = requests.post(
-                    f"http://localhost:8000/notificar?id={id}&titulo={titulo}",
-                    timeout=1
-                )
-            except RequestConnectionError as e:
-                print(e)
+    if not resultado:
+        return {"mensagem": "Tarefa não existe"}
 
-            return {"mensagem": "Tarefa atualizada"}
+    if resultado[0].concluida is True:
+        return {"mensagem": "Tarefa já finalizada"}
 
-    return {"mensagem": "Tarefa não existe"}
+    resultado[0].finalizar()
+
+    sessao.add(resultado[0])
+    sessao.commit()
+    sessao.refresh(resultado[0])
+
+    return {"mensagem": "Tarefa atualizada"}
+
+
 
 # DELETE /tarefas/{id_tarefa}: Exclui tarefa
 @APP.delete("/tarefas/{id_tarefa}")
-async def apagar_tarefa(id_tarefa: int):
-    """ Rota para apagar tarefa. """
-    # 1. Selecionar a tarefa de ID recebido como parâmetro
-    # 2. Remover tarefa da lista de tarefas
-    # 3. Caso a tarefa não exista, você tem que mostrar que a tarefa não existe
+async def apagar_tarefa(sessao: SESSAO, id_tarefa: int):
+    """Rota para apagar tarefa."""
 
-    indice = 0
-    for tarefa in TAREFAS:
-        if id_tarefa == tarefa.id:
-            TAREFAS.pop(indice)
-            return {"mensagem": "Tarefa apagada"}
+    regra = select(Tarefa).where(Tarefa.id == id_tarefa)
+    resultado = sessao.exec(regra).all()
+    
+    if not resultado:
+        return {"mensagem": "Tarefa não existe"}    
 
-        indice += 1
+    tarefa = resultado[0]
 
-    return {"mensagem": "Tarefa não existe"}
+    sessao.delete(tarefa)
+    sessao.commit()
+
+    return {"mensagem": "Tarefa removida"}
+
 
 @APP.get("/")
 async def index():
-    """ Rota raíz. """
+    """Rota raíz."""
     return {"mensagem": "Olá, mundo!"}
+
 
 # 1. Implementar uma rota chamada "/autor" que retorna
 # um dicionário no formato {"mensagem": SEU NOME COMPLETO}
 @APP.get("/autor")
 async def autor():
-    """ Rota para retornar o autor da aplicação """
-    return {"mensagem": "Pedro Rocha Horchulhack"}
+    """Rota para retornar o autor da aplicação"""
+    return {"mensagem": "Matheus Sossai"}
+
 
 # 2. Criar um teste unitário para verificar se a rota
 # está produzindo o resultado esperado
