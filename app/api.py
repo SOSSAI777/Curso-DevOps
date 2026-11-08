@@ -17,7 +17,10 @@ LOGGER.setLevel(logging.DEBUG)
 saida_padrao = logging.StreamHandler()
 arquivo = logging.FileHandler("aplicacao.log", encoding='utf-8')
 
-formatador = logging.Formatter("%(name)s | %(levelname)s | %(asctime)s | %(filename)s:%(lineno)s | %(message)s")
+formatador = logging.Formatter(
+    "%(name)s | %(levelname)s | %(asctime)s | "
+    "%(filename)s:%(lineno)s | %(message)s"
+)
 
 saida_padrao.setFormatter(formatador)
 arquivo.setFormatter(formatador)
@@ -76,7 +79,7 @@ async def tarefas(sessao: SESSAO) -> List[Tarefa]:
     """Rota para listar as tarefas."""
 
     lista_tarefas = sessao.exec(select(Tarefa).offset(0)).all()
-    
+
     LOGGER.info("Usuário listou todas as tarefas")
 
     return lista_tarefas
@@ -93,11 +96,11 @@ async def post_tarefa(sessao: SESSAO, titulo: str, descricao: str = None):
         data_criacao=data,
     )
 
-    LOGGER.info(f"Usuário criou a tarefa {tarefa_nova.get_id()}")
-
     sessao.add(tarefa_nova)
     sessao.commit()
     sessao.refresh(tarefa_nova)
+
+    LOGGER.info("Usuário criou a tarefa %s", tarefa_nova.get_id())
 
     return {"mensagem": "OK"}
 
@@ -112,7 +115,7 @@ async def tarefa_especifica(sessao: SESSAO, id_tarefa: int) -> Tarefa:
 
     if resultado:
         tarefa = resultado[0]
-        LOGGER.info(f"Usuário consultou a tarefa {tarefa.get_id()}")
+        LOGGER.info("Usuário consultou a tarefa %s", tarefa.get_id())
         return tarefa
 
     LOGGER.info("Usuário tentou consultar uma tarefa inexistente")
@@ -137,7 +140,7 @@ async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
         return {"mensagem": "Tarefa não existe"}
 
     if resultado[0].concluida is True:
-        LOGGER.info("Usuário tentou finalziar uma tarefa já concluída")
+        LOGGER.info("Usuário tentou finalizar uma tarefa já concluída")
         return {"mensagem": "Tarefa já finalizada"}
 
     resultado[0].finalizar()
@@ -146,7 +149,7 @@ async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
     sessao.commit()
     sessao.refresh(resultado[0])
 
-    LOGGER.info(f"Usuário finalizou a tarefa {resultado[0].get_id()}")
+    LOGGER.info("Usuário finalizou a tarefa %s", resultado[0].get_id())
 
     return {"mensagem": "Tarefa atualizada"}
 
@@ -168,7 +171,7 @@ async def apagar_tarefa(sessao: SESSAO, id_tarefa: int):
     sessao.delete(tarefa)
     sessao.commit()
 
-    LOGGER.info(f"Usuário removeu a tarefa {tarefa.get_id()}")
+    LOGGER.info("Usuário removeu a tarefa %s", tarefa.get_id())
 
     return {"mensagem": "Tarefa removida"}
 

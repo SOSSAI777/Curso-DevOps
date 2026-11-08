@@ -1,3 +1,4 @@
+"""Configuração de logging da aplicação."""
 
 import logging
 
