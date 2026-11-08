@@ -4,11 +4,29 @@ from datetime import datetime, timezone
 from typing import Annotated, List
 import os
 import sys
+import logging
 
 from fastapi import FastAPI, Depends
 from sqlmodel import SQLModel, Session, create_engine, select
 
 from .modelo import Tarefa
+
+LOGGER = logging.getLogger("aplicacao")
+LOGGER.setLevel(logging.DEBUG)
+
+saida_padrao = logging.StreamHandler()
+arquivo = logging.FileHandler("aplicacao.log", encoding='utf-8')
+
+formatador = logging.Formatter(
+    "%(name)s | %(levelname)s | %(asctime)s | "
+    "%(filename)s:%(lineno)s | %(message)s"
+)
+
+saida_padrao.setFormatter(formatador)
+arquivo.setFormatter(formatador)
+
+LOGGER.addHandler(saida_padrao)
+LOGGER.addHandler(arquivo)
 
 DATABASE_USERNAME = os.environ.get("DATABASE_USERNAME")
 DATABASE_PASSWORD = os.environ.get("DATABASE_PASSWORD")
@@ -16,19 +34,19 @@ DATABASE_ADDRESS = os.environ.get("DATABASE_ADDRESS")
 DATABASE = os.environ.get("DATABASE")
 
 if DATABASE_USERNAME is None:
-    print("DATABASE_USERNAME está faltando")
+    LOGGER.critical("DATABASE_USERNAME está faltando")
     sys.exit(1)
 
 if DATABASE_PASSWORD is None:
-    print("DATABASE_PASSWORD está faltando")
+    LOGGER.critical("DATABASE_PASSWORD está faltando")
     sys.exit(1)
 
 if DATABASE_ADDRESS is None:
-    print("DATABASE_ADDRESS está faltando")
+    LOGGER.critical("DATABASE_ADDRESS está faltando")
     sys.exit(1)
 
 if DATABASE is None:
-    print("DATABASE está faltando")
+    LOGGER.critical("DATABASE está faltando")
     sys.exit(1)
 
 ENGINE = create_engine(
@@ -37,7 +55,7 @@ ENGINE = create_engine(
 
 
 def criar_sessao():
-    """ Função utilitária para criar sessão no banco de dados """
+    """Função utilitária para criar sessão no banco de dados"""
     with Session(ENGINE) as s:
         yield s
 
@@ -46,7 +64,7 @@ SESSAO = Annotated[Session, Depends(criar_sessao)]
 
 
 async def inicializacao(_: FastAPI):
-    """ Função para incialização da API e do banco de dados """
+    """Função para incialização da API e do banco de dados"""
     SQLModel.metadata.create_all(ENGINE)
     yield
 
@@ -61,6 +79,8 @@ async def tarefas(sessao: SESSAO) -> List[Tarefa]:
     """Rota para listar as tarefas."""
 
     lista_tarefas = sessao.exec(select(Tarefa).offset(0)).all()
+
+    LOGGER.info("Usuário listou todas as tarefas")
 
     return lista_tarefas
 
@@ -80,6 +100,8 @@ async def post_tarefa(sessao: SESSAO, titulo: str, descricao: str = None):
     sessao.commit()
     sessao.refresh(tarefa_nova)
 
+    LOGGER.info("Usuário criou a tarefa %s", tarefa_nova.get_id())
+
     return {"mensagem": "OK"}
 
 
@@ -92,7 +114,11 @@ async def tarefa_especifica(sessao: SESSAO, id_tarefa: int) -> Tarefa:
     resultado = sessao.exec(regra).all()
 
     if resultado:
-        return resultado[0]
+        tarefa = resultado[0]
+        LOGGER.info("Usuário consultou a tarefa %s", tarefa.get_id())
+        return tarefa
+
+    LOGGER.info("Usuário tentou consultar uma tarefa inexistente")
 
     return {"mensagem": "Tarefa não existe"}
 
@@ -110,9 +136,11 @@ async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
     resultado = sessao.exec(regra).all()
 
     if not resultado:
+        LOGGER.info("Usuário tentou finalizar uma tarefa inexistente")
         return {"mensagem": "Tarefa não existe"}
 
     if resultado[0].concluida is True:
+        LOGGER.info("Usuário tentou finalizar uma tarefa já concluída")
         return {"mensagem": "Tarefa já finalizada"}
 
     resultado[0].finalizar()
@@ -120,6 +148,8 @@ async def concluir_tarefa(sessao: SESSAO, id_tarefa: int):
     sessao.add(resultado[0])
     sessao.commit()
     sessao.refresh(resultado[0])
+
+    LOGGER.info("Usuário finalizou a tarefa %s", resultado[0].get_id())
 
     return {"mensagem": "Tarefa atualizada"}
 
@@ -133,6 +163,7 @@ async def apagar_tarefa(sessao: SESSAO, id_tarefa: int):
     resultado = sessao.exec(regra).all()
 
     if not resultado:
+        LOGGER.info("Usuário tentou remover tarefa inexistente")
         return {"mensagem": "Tarefa não existe"}
 
     tarefa = resultado[0]
@@ -140,12 +171,17 @@ async def apagar_tarefa(sessao: SESSAO, id_tarefa: int):
     sessao.delete(tarefa)
     sessao.commit()
 
+    LOGGER.info("Usuário removeu a tarefa %s", tarefa.get_id())
+
     return {"mensagem": "Tarefa removida"}
 
 
 @APP.get("/")
 async def index():
     """Rota raíz."""
+
+    LOGGER.info("Usuário acessou a raíz")
+
     return {"mensagem": "Olá, mundo!"}
 
 
@@ -154,7 +190,9 @@ async def index():
 @APP.get("/autor")
 async def autor():
     """Rota para retornar o autor da aplicação"""
-    return {"mensagem": "Pedro Rocha Horchulhack"}
+
+    LOGGER.info("Usuário acessou a rota autor")
+    return {"mensagem": "Matheus Ricordi Sossai"}
 
 
 # 2. Criar um teste unitário para verificar se a rota
