@@ -36,6 +36,7 @@ jobs:
         pytest --rootdir app
   entrega:
     needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,4 +51,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: ${{ vars.DOCKERHUB_USER }}/tarefas:2.0
+          tags: |
+            ${{ vars.DOCKERHUB_USER }}/tarefas:${{ github.sha }}
+            ${{ vars.DOCKERHUB_USER }}/tarefas:latest
